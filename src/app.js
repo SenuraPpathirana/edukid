@@ -3,6 +3,18 @@ import cors from "cors";
 import { supabase } from "./config/supabase.js";
 import authRoutes from "./modules/auth/auth.routes.js";
 import adminRoutes from "./modules/admin/admin.routes.js";
+import kidsRoutes from "./modules/kids/kids.routes.js";
+import userRoutes from "./modules/users/user.routes.js";
+import timersRoutes from "./modules/timers/timers.routes.js";
+import statisticsRoutes from "./modules/statistics/statistics.routes.js";
+import materialsRoutes from "./modules/materials/materials.routes.js";
+import quizzesRoutes from "./modules/quizzes/quizzes.routes.js";
+import gamesRoutes from "./modules/games/games.routes.js";
+import progressRoutes from "./modules/progress/progress.routes.js";
+import reportsRoutes from "./modules/reports/reports.routes.js";
+import certificatesRoutes from "./modules/certificates/certificates.routes.js";
+import subscriptionsRoutes from "./modules/subscriptions/subscriptions.routes.js";
+import transactionsRoutes from "./modules/transactions/transactions.routes.js";
 import { testEmailConfig, sendVerificationEmail } from "./modules/email/email.service.js";
 
 const app = express();
@@ -13,29 +25,14 @@ const allowedOrigins = [
   'http://localhost:8080',
   'http://localhost:5173',
   'http://localhost:3000',
-  'capacitor://localhost',
-  'ionic://localhost',
-  'http://localhost',
-  'https://localhost',
   process.env.FRONTEND_URL,
   process.env.RENDER_EXTERNAL_URL
 ].filter(Boolean);
 
 app.use(cors({
-  origin: function (origin, callback) {
-    // Allow requests with no origin (mobile apps, Postman, etc.)
-    if (!origin) return callback(null, true);
-    
-    if (process.env.NODE_ENV === 'production') {
-      if (allowedOrigins.indexOf(origin) !== -1 || origin.startsWith('capacitor://') || origin.startsWith('ionic://')) {
-        callback(null, true);
-      } else {
-        callback(null, true); // Allow all for now, restrict later
-      }
-    } else {
-      callback(null, true);
-    }
-  },
+  origin: process.env.NODE_ENV === 'production' 
+    ? allowedOrigins 
+    : '*',
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
   credentials: true
@@ -58,6 +55,18 @@ app.use((err, req, res, next) => {
 // ✅ REGISTER ROUTES HERE (NOT inside another route)
 app.use("/api/auth", authRoutes);
 app.use("/api/admin", adminRoutes);
+app.use("/api/kids", kidsRoutes);
+app.use("/api/users", userRoutes);
+app.use("/api/timers", timersRoutes);
+app.use("/api/statistics", statisticsRoutes);
+app.use("/api/materials", materialsRoutes);
+app.use("/api/quizzes", quizzesRoutes);
+app.use("/api/games", gamesRoutes);
+app.use("/api/progress", progressRoutes);
+app.use("/api/reports", reportsRoutes);
+app.use("/api/certificates", certificatesRoutes);
+app.use("/api/subscriptions", subscriptionsRoutes);
+app.use("/api/transactions", transactionsRoutes);
 
 // Email test endpoint
 app.post("/api/test-email", async (req, res) => {
@@ -95,15 +104,6 @@ app.post("/api/test-email", async (req, res) => {
 // root test
 app.get("/", (req, res) => {
   res.send("EduKid Backend Running");
-});
-
-// Health check endpoint
-app.get("/api/health", (req, res) => {
-  res.json({ 
-    status: "ok", 
-    timestamp: new Date().toISOString(),
-    environment: process.env.NODE_ENV || 'development'
-  });
 });
 
 // ✅ test insert route

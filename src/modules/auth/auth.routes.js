@@ -4,6 +4,7 @@ import { supabase } from "../../config/supabase.js";
 import { isValidEmail, isStrongPassword, normalizeEmail } from "../../utils/validators.js";
 import { generateOtp6, otpExpiryDate } from "../../utils/otp.js";
 import { sendVerificationEmail, sendPasswordResetEmail } from "../email/email.service.js";
+import { signAccessToken } from "../../utils/jwt.js";
 
 const router = Router();
 
@@ -56,7 +57,9 @@ router.post("/register", async (req, res) => {
         gender: gender ?? null,
         password_hash,
         is_verified: false,
-        role: role || 'user' // Set role (default to 'user' if not provided)
+        role: role || 'user', // Set role (default to 'user' if not provided)
+        join_date: new Date().toISOString().split('T')[0],
+        account_status: 'Free',
       }])
       .select("user_id, email, is_verified, role")
       .single();
@@ -130,15 +133,15 @@ router.post("/register", async (req, res) => {
       .insert([{
         user_id: userRow.user_id,
         otp,
-        expires_at
+        expires_at,
+        is_used: false,
       }]);
 
     if (otpErr) return res.status(400).json({ error: otpErr.message });
 
     // Send verification email
-    let emailResult;
     try {
-      emailResult = await sendVerificationEmail(emailNorm, otp, fname);
+      await sendVerificationEmail(emailNorm, otp, fname);
     } catch (emailError) {
       console.error('Email sending failed:', emailError);
       // Continue even if email fails - user can resend
@@ -148,12 +151,6 @@ router.post("/register", async (req, res) => {
       message: "Registered successfully. Please check your email for the verification code.",
       user: userRow
     };
-
-    // In development mode (when email not configured), include OTP in response
-    if (emailResult?.otp) {
-      response.otp_debug = otp;
-      response.dev_note = "Email not configured. OTP shown here for testing.";
-    }
 
     return res.status(201).json(response);
   } catch (e) {
@@ -175,7 +172,7 @@ router.post("/verify-otp", async (req, res) => {
     // Get user
     const { data: user, error: userErr } = await supabase
       .from("user")
-      .select("user_id, email, is_verified")
+      .select("user_id, email, is_verified, account_status, role")
       .eq("email", emailNorm)
       .maybeSingle();
 
@@ -232,8 +229,15 @@ router.post("/verify-otp", async (req, res) => {
 
     if (verifyErr) return res.status(500).json({ error: verifyErr.message });
 
+    const accessToken = signAccessToken({
+      user_id: user.user_id,
+      role: user.role || "user",
+      account_status: user.account_status,
+    });
+
     return res.status(200).json({
       message: "Email verified successfully",
+      accessToken,
       user: { ...user, is_verified: true }
     });
   } catch (e) {
@@ -281,15 +285,15 @@ router.post("/resend-otp", async (req, res) => {
       .insert([{
         user_id: user.user_id,
         otp,
-        expires_at
+        expires_at,
+        is_used: false,
       }]);
 
     if (otpErr) return res.status(400).json({ error: otpErr.message });
 
     // Send verification email
-    let emailResult;
     try {
-      emailResult = await sendVerificationEmail(emailNorm, otp, user.fname || 'User');
+      await sendVerificationEmail(emailNorm, otp, user.fname || 'User');
     } catch (emailError) {
       console.error('Email sending failed:', emailError);
     }
@@ -298,19 +302,11 @@ router.post("/resend-otp", async (req, res) => {
       message: "New verification code sent to your email successfully"
     };
 
-    // In development mode (when email not configured), include OTP in response
-    if (emailResult?.otp) {
-      response.otp_debug = otp;
-      response.dev_note = "Email not configured. OTP shown here for testing.";
-    }
-
     return res.status(200).json(response);
   } catch (e) {
     return res.status(500).json({ error: e.message });
   }
 });
-
-import { signAccessToken } from "../../utils/jwt.js";
 
 router.post("/login", async (req, res) => {
   try {
@@ -342,10 +338,10 @@ router.post("/login", async (req, res) => {
     const ok = await bcrypt.compare(password, parentRow.password_hash);
     if (!ok) return res.status(401).json({ error: "Invalid email or password" });
 
-    // Sign JWT
+    // Sign JWT with actual user role from database
     const accessToken = signAccessToken({
       user_id: parentRow.user_id,
-      role: "parent",
+      role: parentRow.role || "user",
       account_status: parentRow.account_status,
     });
 
@@ -406,15 +402,15 @@ router.post("/forgot-password", async (req, res) => {
       .insert([{
         user_id: user.user_id,
         otp,
-        expires_at
+        expires_at,
+        is_used: false,
       }]);
 
     if (otpErr) return res.status(400).json({ error: otpErr.message });
 
     // Send password reset email
-    let emailResult;
     try {
-      emailResult = await sendPasswordResetEmail(emailNorm, otp, user.fname || 'User');
+      await sendPasswordResetEmail(emailNorm, otp, user.fname || 'User');
     } catch (emailError) {
       console.error('Email sending failed:', emailError);
     }
@@ -422,12 +418,6 @@ router.post("/forgot-password", async (req, res) => {
     const response = {
       message: "Password reset code sent to your email successfully"
     };
-
-    // In development mode (when email not configured), include OTP in response
-    if (emailResult?.otp) {
-      response.otp_debug = otp;
-      response.dev_note = "Email not configured. OTP shown here for testing.";
-    }
 
     return res.status(200).json(response);
   } catch (e) {

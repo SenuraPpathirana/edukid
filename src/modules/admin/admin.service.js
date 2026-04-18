@@ -181,23 +181,19 @@ const verifyAndCreateRequest = async (token, userId) => {
     
     console.log('✅ User role updated to pending');
     
-    // Increment used_count and deactivate token (set is_active to false)
-    const newCount = matchedInvite.used_count + 1;
-    const shouldDeactivate = newCount >= matchedInvite.max_uses;
-    
+    // Deactivate token: set used_count = 1 and is_active = false (same as registration flow)
     const { error: updateError } = await supabase
       .from('admin_invites')
       .update({ 
-        used_count: newCount,
-        is_active: !shouldDeactivate // Set to false when max uses reached
+        used_count: 1,
+        is_active: false
       })
       .eq('invite_id', matchedInvite.invite_id);
     
     if (updateError) {
-      console.error('❌ Failed to update token usage:', updateError);
+      console.error('❌ Failed to deactivate token:', updateError);
     } else {
-      console.log('✅ Token usage updated:', matchedInvite.used_count, '→', newCount);
-      console.log('✅ Token is_active set to:', !shouldDeactivate);
+      console.log('✅ Token deactivated: used_count = 1, is_active = false');
     }
     
     return request;
@@ -388,6 +384,7 @@ const getAllUsers = async () => {
         contact_number,
         role,
         is_verified,
+        join_date,
         admin_requests!admin_requests_user_id_fkey(
           request_id,
           requested_at,
